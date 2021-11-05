@@ -142,7 +142,7 @@ contract Vault is ReentrancyGuard, IVault {
         address account,
         address collateralToken,
         address indexToken,
-        uint256 collateralDelta,
+        uint256 collateralDelta, //(sizeDelta/collateralDelta) * X Amount
         uint256 sizeDelta,
         bool isLong,
         uint256 price,

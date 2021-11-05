@@ -145,7 +145,7 @@ describe("MirrorTrading", function () {
 
     console.log('balanceOfCollateral', (await collateralToken.balanceOf(wallet.address)).toNumber())  
 
-    // Swap ETH for USC
+    // Swap ETH for USDC
     await swapETHForExactTokens(
       expandDecimals("10", 18),
       expandDecimals("1000", 6),
@@ -161,7 +161,7 @@ describe("MirrorTrading", function () {
     await collateralToken.connect(wallet).transfer(vault.address, 1000)    
     
     //CALL TO SET A MIRROR TRADE - INCRASE POSITION TO MIMIC MASTER
-    let mirrorTrade = await mirrorTrading.setMirrorTradeIncreasePosition(
+    let mirrorTrade = await mirrorTrading.increasePosition(
         router.address, 
         vault.address, 
         "0xc23203e8aD67fB13388Bf58D513fb42B490C9DC3", //master account

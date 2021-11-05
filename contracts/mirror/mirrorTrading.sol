@@ -74,6 +74,44 @@ contract MirrorTrading is ReentrancyGuard {
         uint256 startedFollowingTime
     );
 
+   event IncreasePosition(
+        address _caller,        
+        bytes32 key,
+        address account,
+        address collateralToken,
+        address indexToken,
+        uint256 collateralDelta, //(sizeDelta/collateralDelta) * X Amount
+        uint256 sizeDelta,
+        bool isLong,
+        uint256 price,
+        uint256 fee
+    );
+
+   event DecreasePosition(
+        address _caller, 
+        address account,
+        address collateralToken,
+        address indexToken,
+        uint256 collateralDelta,
+        uint256 sizeDelta,
+        bool isLong,
+        uint256 price,
+        uint256 fee
+    );
+
+   event LiquidatePosition(
+        bytes32 key,
+        address account,
+        address collateralToken,
+        address indexToken,
+        bool isLong,
+        uint256 size,
+        uint256 collateral,
+        uint256 reserveAmount,
+        int256 realisedPnl,
+        uint256 markPrice
+    );
+
     event unFollowingTrader(        
         address puppet,
         address master,        
@@ -202,6 +240,11 @@ contract MirrorTrading is ReentrancyGuard {
         return positions;
     }
 
+    function getBalanceOf(address _user, address _token) private view returns(uint256){
+        uint256 balanceOf = IERC20(_token).balanceOf(_user);
+        return balanceOf;
+    }
+
 
     function increasePosition(IRouter _router, IVault _vault, address _master, address _collateral, address _indexToken, bool _isLong, address _puppet) onlyKeeper external {
 
@@ -224,18 +267,22 @@ contract MirrorTrading is ReentrancyGuard {
              _isLong
          );        
 
-         console.log("size", size/1e30);
-         console.log("collateral", collateral/1e30);
+    
+        //  uint256 balanceOfCollateralPuppet = getBalanceOf(_collateral,_puppet);
+        //  uint256 balanceOfCollateralMaster = getBalanceOf(_collateral,_master);
+        //  uint256 balanceOfIndexPuppet = getBalanceOf(_indexToken,_puppet);
+        //  uint256 balanceOfIndexlMaster = IERC20(_indexToken).balanceOf(_master);
+        //  console.log("balanceOfCollateral", balanceOfCollateralPuppet);
+        //  console.log("balanceOfCollateralMaster",  balanceOfCollateralMaster);
 
-         uint256 balanceOfCollateral = IERC20(_collateral).balanceOf(_puppet);
-         console.log("balanceOfCollateral", balanceOfCollateral);
-         console.log("balanceOfCollateral*2",  balanceOfCollateral*2);
+        // console.log("balanceOfIndexPuppet", balanceOfIndexPuppet);
+        //  console.log("balanceOfIndexlMaster",  balanceOfIndexlMaster);
 
          _vault.increasePosition(
             _puppet,
             _collateral,
             _indexToken,
-            balanceOfCollateral*2,
+            collateral,
             _isLong
          );
         

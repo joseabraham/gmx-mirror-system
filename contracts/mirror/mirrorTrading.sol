@@ -7,23 +7,30 @@ import "../core/interfaces/IRouter.sol";
 import "../core/interfaces/IVault.sol";
 import "./interfaces/IUniswapV2Router.sol";
 import "../libraries/token/IERC20.sol";
+import "../libraries/token/SafeERC20.sol";
 
 import "hardhat/console.sol";
 
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-
 contract MirrorTrading is ReentrancyGuard {
     using SafeMath for uint256;
-
+    using SafeERC20 for IERC20;
     Reader readerContract;
 
     address public gov;
     address public keeper;
 
-    struct Position{
-        uint256 positionInUsd; 
+    struct GetPosition {
+        uint256 size;
+        uint256 collateral;
+        uint256 price;
+        uint256 lastIncrease;
+    }
+
+    struct Position {
+        uint256 positionInUsd;
         uint256 collateralInUsd;
         uint256 averagePrice;
         uint256 entryFundingRage;
@@ -33,62 +40,73 @@ contract MirrorTrading is ReentrancyGuard {
         uint256 lastIncreasedTime;
     }
 
+    struct IncreasePositionSt {
+        IVault vault;
+        address puppet;
+        address collateralToken;
+        address indexToken;
+        uint256 size;
+        uint256 collateral;
+        bool isLong;
+        address vaultAddress;
+        uint256 leverage;
+        uint256 price;
+    }
+
     struct Follows {
         address puppet;
         address master;
         bool isFollowing;
     }
 
-    struct MirrorTrade {   
+    struct MirrorTrade {
         //INDEX IN FOLLOWS ARRAY
-        uint index;
+        uint256 index;
         address puppet;
-        address master;     
+        address master;
         bool isActive;
         uint256 startedFollowingTime;
     }
 
     struct PuppetTrader {
         //INDEX IN ACCOUNTS ARRAY
-        uint index;
-        uint gmxIndex;
+        uint256 index;
+        uint256 gmxIndex;
         uint256 joinedDate;
-        //MAPS ADDRESS OF MASTER to MirrorTrade 
+        //MAPS ADDRESS OF MASTER to MirrorTrade
         address[] followedMasters;
-        mapping (address => MirrorTrade) mirrorTrades;    
+        mapping(address => MirrorTrade) mirrorTrades;
     }
     //MIRROR POSITION MAPPINGS PUPPET FORLLOWING => MASTER
-    mapping (address => PuppetTrader) public mirrorPositions;
+    mapping(address => PuppetTrader) public mirrorPositions;
 
-
-    //KEEPS TRACK OF ALL ACTIVE FOLLOWS    
+    //KEEPS TRACK OF ALL ACTIVE FOLLOWS
     Follows[] public followsArray;
 
     //KEEP TRACK OF ALL PUPPET ACCOUNTS
     address[] public puppetAccounts;
 
-    event FollowingTrader(        
+    event FollowingTrader(
         address puppet,
-        address master,        
-        bool isActive,        
+        address master,
+        bool isActive,
         uint256 startedFollowingTime
     );
 
-   event IncreasePosition(
-        address _caller,        
-        bytes32 key,
-        address account,
+    event IncreasePosition(
+        bytes32 typeOfCaller,
+        address _caller,
         address collateralToken,
         address indexToken,
         uint256 collateralDelta, //(sizeDelta/collateralDelta) * X Amount
         uint256 sizeDelta,
         bool isLong,
         uint256 price,
-        uint256 fee
+        uint256 lastIncreasedTime
     );
 
-   event DecreasePosition(
-        address _caller, 
+    event DecreasePosition(
+        address _caller,
         address account,
         address collateralToken,
         address indexToken,
@@ -99,7 +117,7 @@ contract MirrorTrading is ReentrancyGuard {
         uint256 fee
     );
 
-   event LiquidatePosition(
+    event LiquidatePosition(
         bytes32 key,
         address account,
         address collateralToken,
@@ -112,10 +130,10 @@ contract MirrorTrading is ReentrancyGuard {
         uint256 markPrice
     );
 
-    event unFollowingTrader(        
+    event unFollowingTrader(
         address puppet,
-        address master,        
-        bool isActive,        
+        address master,
+        bool isActive,
         uint256 unFollowingTime
     );
 
@@ -139,63 +157,57 @@ contract MirrorTrading is ReentrancyGuard {
         gov = _gov;
     }
 
-
     /// @notice Function that maps the puppet to the master, it'll keep track of the master that the puppet wants to follow
-    /// @dev Any address can call it    
-    /// @param _master The trader that is being followed 
-    function followTrader(address _master ) external {      
+    /// @dev Any address can call it
+    /// @param _master The trader that is being followed
+    function followTrader(address _master) external {
         address _puppet = msg.sender;
-        PuppetTrader storage puppet = mirrorPositions[_puppet];  
+        PuppetTrader storage puppet = mirrorPositions[_puppet];
 
-        address checkIfFollowingMaster= puppet.mirrorTrades[_master].master;
+        address checkIfFollowingMaster = puppet.mirrorTrades[_master].master;
         uint256 checkIfUserHasBeenAlreadyAdded = puppet.joinedDate;
-        bool notFollowingMaster = checkIfFollowingMaster == 0x0000000000000000000000000000000000000000 ? true : false;                        
-                        
+        bool notFollowingMaster = checkIfFollowingMaster ==
+            0x0000000000000000000000000000000000000000
+            ? true
+            : false;
+
         require(notFollowingMaster, "Mirror: Already Following this master");
-        
+
         puppet.joinedDate = now;
         puppet.mirrorTrades[_master].puppet = _puppet;
         puppet.mirrorTrades[_master].master = _master;
         puppet.mirrorTrades[_master].isActive = true;
         puppet.mirrorTrades[_master].startedFollowingTime = now;
         puppet.followedMasters.push(_master);
-                
 
         followsArray.push(
-            Follows({
-                puppet: _puppet,
-                master: _master,
-                isFollowing: true
-            })
+            Follows({puppet: _puppet, master: _master, isFollowing: true})
         );
-        
-        puppet.mirrorTrades[_master].index = followsArray.length -1;
-    
-        
-        if(checkIfUserHasBeenAlreadyAdded == 0){
-            puppetAccounts.push(_puppet);            
+
+        puppet.mirrorTrades[_master].index = followsArray.length - 1;
+
+        if (checkIfUserHasBeenAlreadyAdded == 0) {
+            puppetAccounts.push(_puppet);
         }
 
-
         emit FollowingTrader(_puppet, _master, true, now);
-         
     }
 
     /// @notice Function that gets all puppets
     /// @dev Any address can call it
-    function getPuppets() view public returns (address[] memory) {
+    function getPuppets() public view returns (address[] memory) {
         return puppetAccounts;
     }
 
     /// @notice Function that gets one puppets
     /// @dev Any address can call it
-    function getPuppet(address _puppet) view public returns (uint256) {
+    function getPuppet(address _puppet) public view returns (uint256) {
         return (mirrorPositions[_puppet].joinedDate);
     }
 
     /// @notice Function that gets one puppets
     /// @dev Any address can call it
-    function getAllFollows() view public returns (Follows[] memory) {
+    function getAllFollows() public view returns (Follows[] memory) {
         return followsArray;
     }
 
@@ -204,15 +216,14 @@ contract MirrorTrading is ReentrancyGuard {
     /// @param _master The trader will be unfollowed
     function unFollow(address _master) external {
         address _puppet = msg.sender;
-        PuppetTrader storage puppet = mirrorPositions[_puppet];  
-        uint followIndex = puppet.mirrorTrades[_master].index;
+        PuppetTrader storage puppet = mirrorPositions[_puppet];
+        uint256 followIndex = puppet.mirrorTrades[_master].index;
         followsArray[followIndex].isFollowing = false;
         emit unFollowingTrader(_puppet, _master, false, now);
-        
+
         //todo DELETE FROM POSITION AS WELL
         //todo check if there's any current position ...
         //todo check if the position can be liquidated ....
-
     }
 
     /// @notice Function to check status of a follow
@@ -220,73 +231,219 @@ contract MirrorTrading is ReentrancyGuard {
     /// @param _master The trader to check against
     function getIfFollowing(address _master) public view returns (bool) {
         address _puppet = msg.sender;
-        PuppetTrader storage puppet = mirrorPositions[_puppet];  
-        uint followIndex = puppet.mirrorTrades[_master].index;               
-        bool isFollowing = followsArray[followIndex].isFollowing;  
+        PuppetTrader storage puppet = mirrorPositions[_puppet];
+        uint256 followIndex = puppet.mirrorTrades[_master].index;
+        bool isFollowing = followsArray[followIndex].isFollowing;
         return isFollowing;
     }
 
+    /// @notice Function to check status of a follow
+    /// @dev Any address can call it
+    /// @param _master The trader to check against
+    function getIfFollowingMasterAndActive(address _master, address _puppet)
+        public
+        view
+        returns (bool)
+    {
+        address _puppetAddress = _puppet;
+        PuppetTrader storage puppet = mirrorPositions[_puppetAddress];
+        bool isActive = puppet.mirrorTrades[_master].isActive;
+        return isActive;
+    }
+
     function puppetExists(address _puppet) public view returns (bool) {
-        PuppetTrader storage entry = mirrorPositions[_puppet];        
+        PuppetTrader storage entry = mirrorPositions[_puppet];
         return _contains(entry);
     }
 
-    function _contains(PuppetTrader memory _entry) private pure returns (bool){        
+    function _contains(PuppetTrader memory _entry) private pure returns (bool) {
         return _entry.joinedDate > 0;
     }
 
-    function getMasterPositions(address _master, address _vault,address[] memory _collateralTokens, address[] memory _indexTokens, bool[] memory _isLong) public view returns(uint256[] memory){        
-        uint256[] memory positions = readerContract.getPositions(_vault, _master, _collateralTokens, _indexTokens, _isLong);
+    function getMasterPositions(
+        address _master,
+        address _vault,
+        address[] memory _collateralTokens,
+        address[] memory _indexTokens,
+        bool[] memory _isLong
+    ) public view returns (uint256[] memory) {
+        uint256[] memory positions = readerContract.getPositions(
+            _vault,
+            _master,
+            _collateralTokens,
+            _indexTokens,
+            _isLong
+        );
         return positions;
     }
 
-    function getBalanceOf(address _user, address _token) private view returns(uint256){
+    function getBalanceOf(address _user, address _token)
+        private
+        view
+        returns (uint256)
+    {
         uint256 balanceOf = IERC20(_token).balanceOf(_user);
         return balanceOf;
     }
 
+    function getVaultPosition(
+        address _account,
+        address _collateralToken,
+        address _indexToken,
+        bool _isLong,
+        IVault _vault
+    ) private view returns (GetPosition memory) {
+        (
+            uint256 size,
+            uint256 collateral,
+            uint256 price,
+            ,
+            ,
+            ,
+            ,
+            uint256 lastIncreasedTime
+        ) = _vault.getPosition(
+                _account,
+                _collateralToken,
+                _indexToken,
+                _isLong
+            );
+        GetPosition memory getPosition = GetPosition({
+            size: size,
+            collateral: collateral,
+            price: price,
+            lastIncrease: lastIncreasedTime
+        });
+        return getPosition;
+    }
 
-    function increasePosition(IRouter _router, IVault _vault, address _master, address _collateral, address _indexToken, bool _isLong, address _puppet) onlyKeeper external {
+    function _convertToTokenDecimals(uint256 _amount, uint256 _price, uint256 _tokenDecimals) private pure returns(uint256){
+        return  _amount.div(_price).mul(10**_tokenDecimals);
+    }
 
+    function _puppetCollateralCalculation(address _account, address _collateralToken, uint256 _tokenDecimals, uint256 _price, uint256 _leverage) private view returns(uint256, uint256, uint256){
+        uint256 totalBalanceOfCollateral = getBalanceOf(_account, _collateralToken);
+        uint256 totalBalanceOfCollateralUSD = totalBalanceOfCollateral.div(10**_tokenDecimals).mul(_price);
+        uint256 leveragedTotalCollateralUSD = totalBalanceOfCollateralUSD.mul(_leverage);
+        return (totalBalanceOfCollateral, totalBalanceOfCollateralUSD, leveragedTotalCollateralUSD);
+    }
+
+    function _increasePosition(
+        IncreasePositionSt memory position
+    ) private {
+        uint256 tokenDecimals = position.vault.tokenDecimals(position.collateralToken);
+        (uint256 totalBalanceOfCollateral,
+        uint256 totalBalanceOfCollateralUSD,
+        uint256 leveragedTotalCollateralUSD
+        ) = _puppetCollateralCalculation(position.puppet, position.collateralToken, tokenDecimals, position.price, position.leverage);
+        //TOTAL ALLOWED LEVERAGED POSITION        
+        uint256 size = position.size;
+        uint256 collateralMasterWDecimals = _convertToTokenDecimals(position.collateral, position.price, tokenDecimals);
+
+
+        if(totalBalanceOfCollateralUSD > position.collateral){ 
+            //FOLLOW MASTER'S COLLATERAL IF PUPPET'S COLLATERAL AVAILABLE IS BIGGER           
+            IERC20(position.collateralToken).safeTransferFrom(
+                position.puppet,
+                position.vaultAddress,
+                collateralMasterWDecimals
+            );            
+        }else{
+            //MAX OUT COLLATERAL IF PUPPETS COLLATERAL AVAILABLE IS SMALLER THAN MASTERS
+            size = leveragedTotalCollateralUSD;
+            IERC20(position.collateralToken).safeTransferFrom(
+                position.puppet,
+                position.vaultAddress,
+                totalBalanceOfCollateral
+            );
+        }                                                          
+        
+        console.log("***********************************************"); 
+        console.log("** FROM CONTRACT INCREASE POSITION FUNCTION  **");
+        console.log("MASTER COLLATERAL USD => ", position.collateral.div(10**30));
+        console.log("COLLATERAL AVAILABLE PUPPET TOTAL USD => ", totalBalanceOfCollateralUSD.div(10**30));
+        console.log("COLLATERAL MASTER CONVERSION ETH => ", collateralMasterWDecimals.div(10**18));
+        console.log("COLLATERAL PUPPET MAX OUT ETH AVAILABLE=> ", totalBalanceOfCollateral.div(10**18));
+        console.log("MASTER SIZE USD => ", position.size.div(10**30));
+        console.log("SIZE OF PUPPET USD=> ", size.div(10**30));
+        console.log("PRICE USD => ", position.price.div(10**30));
+        console.log("POSITION LEVERAGE => ", position.leverage);
+        console.log("***********************************************");                   
+
+        position.vault.increasePosition(
+            position.puppet,
+            position.collateralToken,
+            position.indexToken,            
+            size,
+            position.isLong
+        );
+    }
+
+    function increasePosition(        
+        IVault _vault,
+        address _master,
+        address _collateralToken,
+        address _indexToken,
+        bool _isLong,
+        address _puppet,
+        address _vaultAddress
+    ) external onlyKeeper {
         //1. CHECK IF THERE'S FOLLOW --> DO SOME CHECKS
         //1.1 IF THE MASTER TRADER DID 100 DO 1OO OR MAX BALANCEOF.... (GRETEAR OR LESS COMPARISON)
         //1.2 WE'LL HAVE A TRESHOLD IN THE FUTURE (30% OF LIQUIDITY)
         //2. EMIT EVENT ONCE FINALIZED
-            
-            (uint256 size,
-             uint256 collateral,
-             uint256 averagePrice,
-             uint256 entryFundingRate,
-             /* reserveAmount */,
-             uint256 realisedPnl,
-             bool hasRealisedProfit,
-             uint256 lastIncreasedTime)  = _vault.getPosition(
-             _master,
-             _collateral,
-             _indexToken,
-             _isLong
-         );        
 
-    
-        //  uint256 balanceOfCollateralPuppet = getBalanceOf(_collateral,_puppet);
-        //  uint256 balanceOfCollateralMaster = getBalanceOf(_collateral,_master);
-        //  uint256 balanceOfIndexPuppet = getBalanceOf(_indexToken,_puppet);
-        //  uint256 balanceOfIndexlMaster = IERC20(_indexToken).balanceOf(_master);
-        //  console.log("balanceOfCollateral", balanceOfCollateralPuppet);
-        //  console.log("balanceOfCollateralMaster",  balanceOfCollateralMaster);
+        require(
+            getIfFollowingMasterAndActive(_master, _puppet) == true,
+            "Mirror: Not following this master"
+        );
 
-        // console.log("balanceOfIndexPuppet", balanceOfIndexPuppet);
-        //  console.log("balanceOfIndexlMaster",  balanceOfIndexlMaster);
-
-         _vault.increasePosition(
-            _puppet,
-            _collateral,
+        GetPosition memory position = getVaultPosition(
+            _master,
+            _collateralToken,
             _indexToken,
-            collateral,
-            _isLong
-         );
+            _isLong,
+            _vault
+        );
+
+        uint256 leverage = position.size.div(position.collateral);
+
+        require(position.size > 0, "Mirror: Invalid Position Size");
         
+        IncreasePositionSt memory increasePositionD = IncreasePositionSt({
+            vault: _vault,
+            puppet: _puppet,
+            collateralToken: _collateralToken,
+            indexToken: _indexToken,
+            size: position.size,
+            collateral: position.collateral,
+            isLong: _isLong,
+            vaultAddress: _vaultAddress,
+            leverage: leverage,
+            price: position.price
+        });
+
+        _increasePosition(
+            increasePositionD
+        );
+
+        GetPosition memory positionPuppet = getVaultPosition(
+            _master,
+            _collateralToken,
+            _indexToken,
+            _isLong,
+            _vault
+        );
+        emit IncreasePosition(
+            "PUPPET",
+            _puppet,
+            _collateralToken,
+            _indexToken,
+            positionPuppet.collateral,
+            positionPuppet.size,
+            _isLong,
+            positionPuppet.price,
+            positionPuppet.lastIncrease
+        );
     }
-
-
 }

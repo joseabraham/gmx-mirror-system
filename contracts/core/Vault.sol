@@ -11,6 +11,8 @@ import "../tokens/interfaces/IUSDG.sol";
 import "./interfaces/IVault.sol";
 import "./interfaces/IVaultPriceFeed.sol";
 
+import "hardhat/console.sol";
+
 contract Vault is ReentrancyGuard, IVault {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -454,6 +456,7 @@ contract Vault is ReentrancyGuard, IVault {
         uint256 amountAfterFees = _collectSwapFees(_token, tokenAmount, feeBasisPoints);
         uint256 mintAmount = amountAfterFees.mul(price).div(PRICE_PRECISION);
         mintAmount = adjustForDecimals(mintAmount, _token, usdg);
+        console.log("mintAmount", mintAmount);
 
         _increaseUsdgAmount(_token, mintAmount);
         _increasePoolAmount(_token, amountAfterFees);
@@ -1256,6 +1259,7 @@ contract Vault is ReentrancyGuard, IVault {
     // we have this validation as a function instead of a modifier to reduce contract size
     function _validateManager() private view {
         if (inManagerMode) {
+            console.log("msg.sender validate manager", msg.sender);
             _validate(isManager[msg.sender], 54);
         }
     }

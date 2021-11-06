@@ -91,6 +91,10 @@ function getPriceBitArray(prices) {
   return priceBitArray
 }
 
+const convertToNormalNumber = (bigNum,decimals) => {
+  return ethers.utils.formatUnits(bigNum, decimals)
+}
+
 module.exports = {
   newWallet,
   maxUint256,
@@ -104,5 +108,6 @@ module.exports = {
   getBlockTime,
   getTxnBalances,
   print,
-  getPriceBitArray
+  getPriceBitArray,
+  convertToNormalNumber
 }

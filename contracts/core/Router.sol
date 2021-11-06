@@ -85,8 +85,8 @@ contract Router is IRouter {
         IVault(vault).directPoolDeposit(_token);
     }
 
-    function swap(address[] memory _path, uint256 _amountIn, uint256 _minOut, address _receiver) public override {
-        IERC20(_path[0]).safeTransferFrom(_sender(), vault, _amountIn);
+    function swap(address[] memory _path, uint256 _amountIn, uint256 _minOut, address _receiver) public override {        
+        IERC20(_path[0]).safeTransferFrom(_sender(), vault, _amountIn);        
         uint256 amountOut = _swap(_path, _minOut, _receiver);
         emit Swap(msg.sender, _path[0], _path[_path.length - 1], _amountIn, amountOut);
     }

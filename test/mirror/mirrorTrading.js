@@ -87,9 +87,7 @@ describe("MirrorTrading", function () {
 
     //APPROVES MIRROR CONTRACT TO TRADE ON BEHALF OF PUPPET
     await vault.addRouter(mirrorTrading.address);    
-    
-    
-
+        
     if(collateralToken.address !== weth.address){
     // Swap ETH for USDC
         await swapETHForExactTokens(
@@ -101,14 +99,10 @@ describe("MirrorTrading", function () {
         );
     }else{
        // let balanceOfCollateral = await collateralToken.balanceOf(wallet.address);    
-    const balance0ETH = (await provider.getBalance(user1.address)).div(2);
-    await collateralToken.connect(wallet).deposit({value: balance0ETH});
+      const balance0ETH = (await provider.getBalance(user1.address)).div(2);
+      await collateralToken.connect(wallet).deposit({value: balance0ETH});
     }
-   
-                
-    //TRANSFER COLLATERAL TO VAULT        
-    // await collateralToken.connect(wallet).transfer(vault.address, balanceOfCollateral)         
-    
+                      
     await collateralToken.approve(mirrorTrading.address, collateralToken.balanceOf(wallet.address));
         
     //CALL TO SET A MIRROR TRADE - INCRASE POSITION TO MIMIC MASTER
@@ -144,6 +138,7 @@ describe("MirrorTrading", function () {
     console.log("** FROM FRONTEND PUPPET INCREASE POSITION    **");
     console.log("PUPPET OPENED POSITION SIZE USD=> ", convertToNormalNumber(positionOpened[0],30))
     console.log("PUPPET OPENED POSITION COLLATERAL USD=> ",convertToNormalNumber(positionOpened[1],30))
+    console.log("PUPPET OPENED POSITION LEVERAGE=> ", convertToNormalNumber(positionOpened[0],30)/convertToNormalNumber(positionOpened[1],30))
     console.log("PUPPET OPENED POSITION AVG.PRICE USD=> ", convertToNormalNumber(positionOpened[2],30))
     console.log("PUPPET ENTRY FUNDING RATE AVG.PRICE USD=> ", convertToNormalNumber(positionOpened[3],30))
     console.log("PUPPET RESERVE AMOUNT => ", convertToNormalNumber(positionOpened[4],30))
@@ -151,22 +146,6 @@ describe("MirrorTrading", function () {
     console.log("PUPPET PnL POSITIVE => ", positionOpened[6])
     console.log("PUPPET TIME => ", new Date(positionOpened[5].toNumber()*10000))
     console.log("***********************************************");      
-    // let vaultPositionMirror = await vault.getPosition(
-    //     wallet.address, //master account
-    //     "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8", // collateral token
-    //     "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", // index token
-    //     false //isLong        
-    // )
-
-    // console.log("vaultPositionMirror", vaultPositionMirror)    
-    //   let vaultData = {
-    //       positionUSD: vaultPosition[0].toString()
-    //   }
-    // //   console.log("vaultPosition", vaultPosition)
-    // //   console.log("vaultData", vaultData)
-
-
-
       
   })
 

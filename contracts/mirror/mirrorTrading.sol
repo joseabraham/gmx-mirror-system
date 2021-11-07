@@ -14,6 +14,8 @@ import "hardhat/console.sol";
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
+/*todo can only follow one master with one indextoken ? */
+
 contract MirrorTrading is ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -51,6 +53,19 @@ contract MirrorTrading is ReentrancyGuard {
         address vaultAddress;
         uint256 leverage;
         uint256 price;
+    }
+
+    struct DecreasePositionSt {
+        IVault vault;
+        address puppet;
+        address collateralToken;
+        address indexToken;
+        uint256 size;
+        uint256 collateral;
+        bool isLong;
+        address vaultAddress;        
+        uint256 price;
+        address receiver;
     }
 
     struct Follows {
@@ -106,15 +121,16 @@ contract MirrorTrading is ReentrancyGuard {
     );
 
     event DecreasePosition(
+        bytes32 typeOfCaller,
         address _caller,
-        address account,
         address collateralToken,
         address indexToken,
-        uint256 collateralDelta,
+        uint256 collateralDelta, //(sizeDelta/collateralDelta) * X Amount
         uint256 sizeDelta,
         bool isLong,
         uint256 price,
-        uint256 fee
+        uint256 lastIncreasedTime,
+        address receiver
     );
 
     event LiquidatePosition(
@@ -379,6 +395,51 @@ contract MirrorTrading is ReentrancyGuard {
         );
     }
 
+    function _decreasePosition(
+        DecreasePositionSt memory position
+    ) private {
+
+        GetPosition memory positionPuppet = getVaultPosition(
+            position.puppet,
+            position.collateralToken,
+            position.indexToken,
+            position.isLong,
+            position.vault
+        );
+
+        uint256 size = position.size;
+        uint256 collateral = position.collateral;
+
+        if(position.collateral == 0){
+            collateral = positionPuppet.collateral;
+            size = positionPuppet.size;
+        }
+
+        if(position.collateral > 0 && positionPuppet.collateral > position.collateral ){
+            collateral = position.collateral;
+            size = position.size;
+        }
+        
+        console.log("***********************************************"); 
+        console.log("** FROM CONTRACT DECREASE POSITION FUNCTION  **");
+        console.log("MASTER COLLATERAL USD => ", position.collateral.div(10**30));
+        console.log("COLLATERAL AVAILABLE PUPPET TOTAL USD => ", positionPuppet.collateral.div(10**30));                
+        console.log("MASTER SIZE USD => ", position.size.div(10**30));
+        console.log("SIZE OF PUPPET USD=> ", size.div(10**30));
+        console.log("PRICE USD => ", position.price.div(10**30));        
+        console.log("***********************************************");                   
+
+        position.vault.decreasePosition(
+            position.puppet,
+            position.collateralToken,
+            position.indexToken, 
+            collateral,
+            size,           
+            position.isLong,
+            position.puppet
+        );
+    }
+
     function increasePosition(        
         IVault _vault,
         address _master,
@@ -444,6 +505,73 @@ contract MirrorTrading is ReentrancyGuard {
             _isLong,
             positionPuppet.price,
             positionPuppet.lastIncrease
+        );
+    }
+
+    function decreasePosition(        
+        IVault _vault,
+        address _master,
+        address _collateralToken,
+        address _indexToken,
+        bool _isLong,
+        address _puppet,
+        address _vaultAddress
+    ) external onlyKeeper {
+        //1. CHECK IF THERE'S FOLLOW --> DO SOME CHECKS
+        //1.1 IF THE MASTER TRADER DID 100 DO 1OO OR MAX BALANCEOF.... (GRETEAR OR LESS COMPARISON)
+        //1.2 WE'LL HAVE A TRESHOLD IN THE FUTURE (30% OF LIQUIDITY)
+        //2. EMIT EVENT ONCE FINALIZED
+
+        require(
+            getIfFollowingMasterAndActive(_master, _puppet) == true,
+            "Mirror: Not following this master"
+        );
+
+        GetPosition memory position = getVaultPosition(
+            _master,
+            _collateralToken,
+            _indexToken,
+            _isLong,
+            _vault
+        );
+        
+        
+        DecreasePositionSt memory increasePositionD = DecreasePositionSt({
+            vault: _vault,
+            puppet: _puppet,
+            collateralToken: _collateralToken,
+            indexToken: _indexToken,
+            size: position.size,
+            collateral: position.collateral,
+            isLong: _isLong,
+            vaultAddress: _vaultAddress,            
+            price: position.price,
+            receiver: _puppet
+        });
+
+        _decreasePosition(
+            increasePositionD
+        );
+
+        GetPosition memory positionPuppet = getVaultPosition(
+            _master,
+            _collateralToken,
+            _indexToken,
+            _isLong,
+            _vault
+        );
+
+        emit DecreasePosition(
+            "PUPPET",
+            _puppet,
+            _collateralToken,
+            _indexToken,
+            positionPuppet.collateral,
+            positionPuppet.size,
+            _isLong,
+            positionPuppet.price,
+            positionPuppet.lastIncrease,
+             _puppet
         );
     }
 }

@@ -18,7 +18,10 @@ Install packages:
 ## USEFUL COMMANDS
 ```
 npx hardhat run scripts/peripherals/read.js --network arbitrum
-npx hardhat test test/mirror/mirrorTrading.js
-```
 
-/* "ARBITRUM_URL": "https://arb-mainnet.g.alchemy.com/v2/UnbS58BlH7Z1fK4iFj5zRtTCvfFDcnVm"*/
+TEST AGAINST HARDHAT ARBITRUM FORK ON LIVE GMX CONTRACTS 
+npx hardhat test test/mirror/mirrorTrading.js
+
+TEST AGAINST HARDHAT ARBITRUM FORK ON LOCAL DEPLOYED GMX CONTRACTS 
+npx hardhat test test/mirror/mirrorTradingComplete.js
+```

@@ -212,10 +212,7 @@ describe("MirrorTrading", function () {
       convertToNormalNumber(positionOpened[5], 30)
     );
     console.log("PUPPET PnL POSITIVE => ", positionOpened[6]);
-    console.log(
-      "PUPPET TIME => ",
-      positionOpened[5].toNumber()
-    );
+    console.log("PUPPET TIME => ", positionOpened[5].toNumber());
     console.log("***********************************************");
   });
 
@@ -223,10 +220,9 @@ describe("MirrorTrading", function () {
     /*IT WILL SIMULATE A DECREASE POSITION BUT NOT FOLLOW ONE*/
 
     //ADDS PUPPET TO FOLLOW A MASTER
-    await expect(mirrorTrading.connect(user1).followTrader(user2.address)).to.emit(
-      mirrorTrading,
-      "FollowingTrader"
-    );
+    await expect(
+      mirrorTrading.connect(user1).followTrader(user2.address)
+    ).to.emit(mirrorTrading, "FollowingTrader");
 
     //APPROVES MIRROR CONTRACT TO TRADE ON BEHALF OF PUPPET
     await vault.connect(user1).addRouter(mirrorTrading.address);
@@ -246,11 +242,10 @@ describe("MirrorTrading", function () {
       await collateralToken.connect(user1).deposit({ value: balance0ETH });
     }
 
-    await collateralToken.connect(user1).approve(
-      mirrorTrading.address,
-      collateralToken.balanceOf(user1.address)
-    );
-    
+    await collateralToken
+      .connect(user1)
+      .approve(mirrorTrading.address, collateralToken.balanceOf(user1.address));
+
     //CALL TO SET A MIRROR TRADE - INCRASE POSITION TO MIMIC MASTER
     let position1 = mirrorTrading.increasePosition(
       vault.address,
@@ -266,10 +261,9 @@ describe("MirrorTrading", function () {
       "Mirror: Not following this master"
     );
 
-    await expect(mirrorTrading.connect(user1).followTrader(masterToFollow)).to.emit(
-      mirrorTrading,
-      "FollowingTrader"
-    );
+    await expect(
+      mirrorTrading.connect(user1).followTrader(masterToFollow)
+    ).to.emit(mirrorTrading, "FollowingTrader");
 
     await mirrorTrading.increasePosition(
       vault.address,
@@ -282,11 +276,10 @@ describe("MirrorTrading", function () {
       { gasPrice: "100000000000" }
     );
 
-    await expect(mirrorTrading.connect(user1).followTrader(decreaseMasterToFollow)).to.emit(
-      mirrorTrading,
-      "FollowingTrader"
-    );
-    
+    await expect(
+      mirrorTrading.connect(user1).followTrader(decreaseMasterToFollow)
+    ).to.emit(mirrorTrading, "FollowingTrader");
+
     await mirrorTrading.decreasePosition(
       vault.address,
       decreaseMasterToFollow, //master account
@@ -298,12 +291,14 @@ describe("MirrorTrading", function () {
       { gasPrice: "100000000000" }
     );
 
-    let positionOpened = await vault.connect(user1).getPosition(
-      user1.address,
-      collateralToken.address,
-      indexToken.address,
-      isLong
-    );
+    let positionOpened = await vault
+      .connect(user1)
+      .getPosition(
+        user1.address,
+        collateralToken.address,
+        indexToken.address,
+        isLong
+      );
 
     console.log("**************DECREASE POSITION****************");
     console.log("** FROM FRONTEND PUPPET DECREASE POSITION    **");
@@ -337,10 +332,7 @@ describe("MirrorTrading", function () {
       convertToNormalNumber(positionOpened[5], 30)
     );
     console.log("PUPPET PnL POSITIVE => ", positionOpened[6]);
-    console.log(
-      "PUPPET TIME => ",
-      positionOpened[5].toNumber()
-    );
+    console.log("PUPPET TIME => ", positionOpened[5].toNumber());
     console.log("***********************************************");
   });
 });
